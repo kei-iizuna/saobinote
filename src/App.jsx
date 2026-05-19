@@ -266,11 +266,82 @@ function PostForm({ user, profile, onPosted }) {
   );
 }
 
+// ── 観察編集フォーム ──────────────────────────────────────────────────────
+function EditForm({ obs, onSaved, onCancel }) {
+  const [category, setCategory] = useState(obs.category);
+  const [species,  setSpecies]  = useState(obs.species_name || "");
+  const [memo,     setMemo]     = useState(obs.memo || "");
+  const [location, setLocation] = useState(obs.location_name || "");
+  const [loading,  setLoading]  = useState(false);
+  const [status,   setStatus]   = useState("");
+
+  const handleSave = async () => {
+    setLoading(true); setStatus("");
+    const { error } = await supabase.from("observations").update({
+      category,
+      species_name:  species || null,
+      memo:          memo || null,
+      location_name: location || null,
+    }).eq("id", obs.id);
+
+    if (error) { setStatus("❌ 保存に失敗しました"); }
+    else { setStatus("✅ 更新しました！"); setTimeout(() => onSaved(), 800); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #e0d8cc" }}>
+      <div style={{ fontWeight: 700, fontSize: 12, color: "#555", marginBottom: 10 }}>✏️ 編集</div>
+
+      {/* カテゴリ */}
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
+        {CATEGORIES.map(cat => (
+          <button key={cat.id} onClick={() => setCategory(cat.id)}
+            style={{ padding: "4px 10px", borderRadius: 20, border: "1.5px solid", borderColor: category === cat.id ? cat.color : "#ddd", background: category === cat.id ? cat.bg : "#fff", color: category === cat.id ? cat.color : "#888", fontSize: 11, fontWeight: category === cat.id ? 700 : 400, cursor: "pointer", fontFamily: "inherit" }}>
+            {cat.icon} {cat.id}
+          </button>
+        ))}
+      </div>
+
+      <input value={species} onChange={e => setSpecies(e.target.value)} placeholder="種名（不明でもOK）"
+        style={{ width: "100%", border: "1.5px solid #e0d8cc", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
+      <input value={location} onChange={e => setLocation(e.target.value)} placeholder="場所"
+        style={{ width: "100%", border: "1.5px solid #e0d8cc", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
+      <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="メモ" rows={2}
+        style={{ width: "100%", border: "1.5px solid #e0d8cc", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
+
+      {status && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: status.startsWith("✅") ? "#2d5a3d" : "#dc2626", marginBottom: 8 }}>{status}</div>
+      )}
+
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={handleSave} disabled={loading}
+          style={{ ...S.btn(loading ? "#aaa" : "#2d5a3d"), flex: 2, padding: "8px", fontSize: 12, borderRadius: 8 }}>
+          {loading ? "保存中..." : "💾 保存"}
+        </button>
+        <button onClick={onCancel}
+          style={{ ...S.btn("#fff", "#888"), flex: 1, padding: "8px", fontSize: 12, borderRadius: 8, border: "1px solid #ddd" }}>
+          キャンセル
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── 観察カード ────────────────────────────────────────────────────────────
-function ObservationCard({ obs, profiles }) {
+function ObservationCard({ obs, profiles, onUpdated }) {
+  const [editing,  setEditing]  = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const cat     = getCat(obs.category);
   const poster  = profiles[obs.user_id];
   const dateStr = new Date(obs.observed_at).toLocaleDateString("ja-JP", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const handleDelete = async () => {
+    if (!confirm("この記録を削除しますか？")) return;
+    setDeleting(true);
+    await supabase.from("observations").delete().eq("id", obs.id);
+    onUpdated();
+  };
 
   return (
     <div style={{ ...S.card, borderLeft: `4px solid ${cat.color}` }}>
@@ -284,9 +355,22 @@ function ObservationCard({ obs, profiles }) {
             <div style={{ fontSize: 10, color: "#aaa", marginTop: 1 }}>{obs.category}</div>
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, color: "#2d5a3d", fontWeight: 600 }}>{poster?.name || "..."}</div>
-          <div style={{ fontSize: 10, color: "#bbb" }}>{dateStr}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, color: "#2d5a3d", fontWeight: 600 }}>{poster?.name || "..."}</div>
+            <div style={{ fontSize: 10, color: "#bbb" }}>{dateStr}</div>
+          </div>
+          {/* 編集・削除ボタン */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <button onClick={() => setEditing(!editing)}
+              style={{ background: editing ? "#e0d8cc" : "#f5f2eb", border: "1px solid #ddd", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", color: "#555" }}>
+              ✏️
+            </button>
+            <button onClick={handleDelete} disabled={deleting}
+              style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", color: "#dc2626" }}>
+              🗑️
+            </button>
+          </div>
         </div>
       </div>
 
@@ -299,6 +383,10 @@ function ObservationCard({ obs, profiles }) {
       )}
       {obs.memo && (
         <div style={{ fontSize: 13, color: "#444", lineHeight: 1.7 }}>{obs.memo}</div>
+      )}
+
+      {editing && (
+        <EditForm obs={obs} onSaved={() => { setEditing(false); onUpdated(); }} onCancel={() => setEditing(false)} />
       )}
     </div>
   );
@@ -462,7 +550,7 @@ export default function App() {
             ) : (
               <div>
                 {observations.map(obs => (
-                  <ObservationCard key={obs.id} obs={obs} profiles={profiles} />
+                  <ObservationCard key={obs.id} obs={obs} profiles={profiles} onUpdated={fetchObservations} />
                 ))}
               </div>
             )}
